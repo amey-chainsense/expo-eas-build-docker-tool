@@ -1,0 +1,56 @@
+# Use Node.js official image as a base image
+FROM node:18
+
+# Install dependencies required for Expo and building APKs
+RUN apt-get update && \
+    apt-get install -y openjdk-17-jdk wget unzip jq
+
+# Install Android SDK
+RUN wget -q https://dl.google.com/android/repository/commandlinetools-linux-6858069_latest.zip -O android-tools.zip && \
+    mkdir -p /usr/local/android-sdk/cmdline-tools && \
+    unzip -q android-tools.zip -d /usr/local/android-sdk/cmdline-tools && \
+    rm android-tools.zip
+
+# Set environment variables for Android SDK
+ENV ANDROID_SDK_ROOT=/usr/local/android-sdk
+ENV PATH=$PATH:/usr/local/android-sdk/cmdline-tools/cmdline-tools/bin:/usr/local/android-sdk/platform-tools:/usr/local/android-sdk/build-tools
+
+# Install necessary SDK packages
+RUN yes | sdkmanager --licenses && \
+    sdkmanager "platform-tools" "platforms;android-30" "build-tools;30.0.3" "ndk;26.1.10909125"
+
+# Install bundletool
+RUN VERSION=$( \
+    curl --silent --show-error --location --fail \
+      --output /dev/null \
+      --write-out "%{url_effective}" \
+      https://github.com/google/bundletool/releases/latest \
+      | xargs basename \
+  ) && \
+  curl --silent --show-error --location --fail \
+    --output /usr/local/bin/bundletool.jar \
+    "https://github.com/google/bundletool/releases/download/$VERSION/bundletool-all-$VERSION.jar"
+
+# Make sure bundletool is executable
+RUN chmod +x /usr/local/bin/bundletool.jar
+
+# Set working directory
+WORKDIR /app
+
+# Copy package.json and package-lock.json
+COPY package*.json ./
+
+# Install Expo CLI and EAS CLI globally
+RUN npm install -g expo-cli eas-cli
+
+# Install project dependencies
+RUN npm install
+
+# Copy the rest of the application code
+COPY . .
+
+# Expose port 19000 for Expo server (optional, for development)
+EXPOSE 19000
+
+# Default command to start the Expo project (optional, for development)
+CMD ["expo", "start", "--tunnel"]
